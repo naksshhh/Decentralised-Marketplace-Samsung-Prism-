@@ -1,0 +1,7 @@
+[submodule "prism-frontend"]
+    path = prism-frontend
+    url = https://github.com/naksshhh/Decentralised-Marketplace-Samsung-Prism-Frontend.git
+
+[submodule "proxy re-encryption"]
+    path = proxy re-encryption
+    url = https://github.com/naksshhh/proxy-re-encryption.git 

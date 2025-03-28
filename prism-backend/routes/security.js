@@ -5,6 +5,7 @@ const path = require('path');
 const watermarkService = require('../services/security/watermarkService');
 const reEncryptionService = require('../services/security/reEncryptionService');
 const auth = require('../middleware/auth');
+const ec = require('elliptic').ec;
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -77,9 +78,30 @@ router.post('/encrypt', auth, upload.single('file'), async (req, res) => {
             return res.status(400).json({ message: 'No file uploaded' });
         }
 
-        const { publicKey } = req.body;
+        // Get public key from query parameters
+        const publicKey = req.query.publicKey;
         if (!publicKey) {
             return res.status(400).json({ message: 'Public key is required' });
+        }
+
+        // Debug logging
+        console.log('Received public key:', publicKey);
+        console.log('Public key length:', publicKey.length);
+        console.log('Public key starts with 04:', publicKey.startsWith('04'));
+        console.log('Public key characters:', Array.from(publicKey).map(c => c.charCodeAt(0)));
+
+        // Ensure public key is in uncompressed format
+        let formattedPublicKey = publicKey;
+        if (!publicKey.startsWith('04')) {
+            // If it's not in uncompressed format, try to convert it
+            try {
+                const key = ec.keyFromPublic(publicKey, 'hex');
+                formattedPublicKey = key.getPublic(false, 'hex'); // false for uncompressed format
+            } catch (error) {
+                return res.status(400).json({ 
+                    message: 'Invalid public key format. Key must be in uncompressed format (starting with 04) or a valid compressed format.' 
+                });
+            }
         }
 
         const outputFile = `uploads/encrypted_${Date.now()}.json`;
@@ -87,7 +109,7 @@ router.post('/encrypt', auth, upload.single('file'), async (req, res) => {
             req.file.path,
             outputFile,
             'encrypt',
-            { publicKey }
+            { publicKey: formattedPublicKey }
         );
 
         res.json({

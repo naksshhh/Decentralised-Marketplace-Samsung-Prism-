@@ -1,5 +1,7 @@
-const Proxy = require('../../proxy re-encryption/src/proxy');
+const Proxy = require('../../../proxy re-encryption/src/proxy.js');
 const CryptoJS = require('crypto-js');
+const EC = require('elliptic').ec;
+const ec = new EC('secp256k1');
 
 class ReEncryptionService {
     constructor() {
@@ -10,13 +12,42 @@ class ReEncryptionService {
         };
     }
 
+    validatePublicKey(publicKey) {
+        if (!publicKey.startsWith('04')) {
+            throw new Error('Public key must be in uncompressed format (starting with 04)');
+        }
+        if (publicKey.length !== 130) { // 04 + 64 bytes for x + 64 bytes for y
+            throw new Error('Invalid public key length');
+        }
+        return true;
+    }
+
+    validatePrivateKey(privateKey) {
+        if (privateKey.length !== 64) { // 32 bytes in hex
+            throw new Error('Invalid private key length');
+        }
+        return true;
+    }
+
     encryptData(publicKey, data) {
+        // Validate public key format
+        this.validatePublicKey(publicKey);
+        
+        // Convert the public key from hex to bytes
         const pubKey = Proxy.public_key_from_bytes(Proxy.from_hex(publicKey));
+        
+        // Generate capsule and symmetric key
         const cp = Proxy.encapsulate(pubKey);
         const symKey = Proxy.to_hex(cp.symmetric_key.to_bytes());
 
-        const key = CryptoJS.enc.Utf8.parse(symKey);
-        const encrypted = CryptoJS.AES.encrypt(data, key, this.options);
+        // Convert symmetric key to CryptoJS format
+        const key = CryptoJS.enc.Hex.parse(symKey);
+        
+        // Convert data to CryptoJS WordArray
+        const dataWordArray = CryptoJS.enc.Utf8.parse(data);
+        
+        // Encrypt the data
+        const encrypted = CryptoJS.AES.encrypt(dataWordArray, key, this.options);
 
         return {
             key: Proxy.to_hex(cp.capsule.to_bytes()),
@@ -25,13 +56,25 @@ class ReEncryptionService {
     }
 
     decryptData(privateKey, obj) {
+        // Validate private key format
+        this.validatePrivateKey(privateKey);
+        
+        // Convert the private key from hex to bytes
         const priKey = Proxy.private_key_from_bytes(Proxy.from_hex(privateKey));
+        
+        // Convert capsule from hex to bytes
         const capsule = Proxy.capsule_from_bytes(Proxy.from_hex(obj.key));
+        
+        // Decapsulate to get symmetric key
         const symKey = Proxy.decapsulate(capsule, priKey);
-
-        const key = CryptoJS.enc.Utf8.parse(Proxy.to_hex(symKey.to_bytes()));
+        
+        // Convert symmetric key to CryptoJS format
+        const key = CryptoJS.enc.Hex.parse(Proxy.to_hex(symKey.to_bytes()));
+        
+        // Decrypt the data
         const decrypted = CryptoJS.AES.decrypt(obj.cipher, key, this.options);
-
+        
+        // Convert back to string
         return decrypted.toString(CryptoJS.enc.Utf8);
     }
 
